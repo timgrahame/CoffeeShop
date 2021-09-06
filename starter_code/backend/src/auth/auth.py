@@ -32,26 +32,29 @@ class AuthError(Exception):
 '''
 def get_token_auth_header():
     auth = request.headers.get('Authorization', None)
-    #missing authorization
-    if not auth:
+
+    if auth is None:
         raise AuthError({
             'code': 'invalid_header',
             'description': 'Unable to find the appropriate key.'
         }, 401)
-    #missing bearer
+    
     bearer_token = auth.split()
+
     if bearer_token[0].lower() !='bearer':
          raise AuthError({
             'code': 'invalid_header',
             'description': 'Malformed Header.'
         }, 401)
-    #missing token
-    elif len(bearer_token) == 1:
+
+
+    elif len(bearer_token) == 1 or len(bearer_token)>2:
           raise AuthError({
             'code': 'invalid_header',
             'description': 'Missing Token.'
         }, 401)
-    #Get the token if header is correctly formed
+          
+
     token = bearer_token[1]
     return token
     
@@ -67,17 +70,18 @@ def get_token_auth_header():
     return true otherwise
 '''
 def check_permissions(permission, payload):
+
     if 'permissions' not in payload:
         raise AuthError({
             'code': 'Unauthorized',
             'description': 'No permissions found'
-        }, 400)
+        }, 401)
 
-    if permission not in payload:
+    if permission not in payload['permissions']:
         raise AuthError({
             'code': 'Unauthorized',
             'description': 'You are not Authorized to do this'
-        }, 403)
+        }, 401)
     return True
 
 '''
@@ -94,14 +98,9 @@ def check_permissions(permission, payload):
     !!NOTE urlopen has a common certificate error described here: https://stackoverflow.com/questions/50236117/scraping-ssl-certificate-verify-failed-error-for-http-en-wikipedia-org
 '''
 def verify_decode_jwt(token):
-    # GET THE PUBLIC KEY FROM AUTH0
     jsonurl = urlopen(f'https://{AUTH0_DOMAIN}/.well-known/jwks.json')
     jwks = json.loads(jsonurl.read())
-    
-    # GET THE DATA IN THE HEADER
     unverified_header = jwt.get_unverified_header(token)
-    
-    # CHOOSE OUR KEY
     rsa_key = {}    
     if 'kid' not in unverified_header:
             raise AuthError({
@@ -118,19 +117,16 @@ def verify_decode_jwt(token):
                 'n': key['n'],
                 'e': key['e']
             }
-    
-    # Finally, verify!!!
+
     if rsa_key:
         try:
-            # USE THE KEY TO VALIDATE THE JWT
             payload = jwt.decode(
-                token,
-                rsa_key,
-                algorithms=ALGORITHMS,
-                audience=API_AUDIENCE,
-                issuer='https://' + AUTH0_DOMAIN + '/'
-            )
-
+                                token,
+                                rsa_key,
+                                algorithms=ALGORITHMS,
+                                audience=API_AUDIENCE,
+                                issuer='https://' + AUTH0_DOMAIN + '/')
+            print (payload)
             return payload
 
         except jwt.ExpiredSignatureError:
@@ -144,17 +140,17 @@ def verify_decode_jwt(token):
                 'code': 'invalid_claims',
                 'description': 'Incorrect claims. Please, check the audience and issuer.'
             }, 401)
+
         except Exception:
             raise AuthError({
                 'code': 'invalid_header',
                 'description': 'Unable to parse authentication token.'
             }, 400)
+
     raise AuthError({
                 'code': 'invalid_header',
                 'description': 'Unable to find the appropriate key.'
-            }, 400)
-
-
+            }, 403)
 
 '''
 @TODO implement @requires_auth(permission) decorator method
